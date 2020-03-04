@@ -3,7 +3,22 @@
 const request = require('request-promise-native');
 const { sendNotification } = require('./notifications');
 
-async function printCourse(courseNumber, quarter) {
+function beep() {
+    process.stdout.write('\x07');
+}
+
+function logCourse(course) {
+    const time = new Date().toLocaleTimeString('en-US', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+
+    console.log(`[${time}] ${course.code}-${course.section} (${course.status}): ${course.openSeats} open seats`);
+}
+
+async function checkCourse(courseNumber, quarter) {
     const response = await request({
         uri: 'https://pisa.ucsc.edu/class_search/index.php',
         method: 'POST',
@@ -25,11 +40,15 @@ async function printCourse(courseNumber, quarter) {
         openSeats: infoMatch[2]
     };
 
-    if (course.openSeats !== '0')
+    logCourse(course);
+
+    if (course.openSeats !== '0') {
+        beep();
         sendNotification(`${course.code}-${course.section} has ${course.openSeats} open seats`);
+    }
 }
 
 const interval = parseInt(process.argv[2]);
 console.log(`Checking for course updates every ${interval} seconds`);
 
-setInterval(printCourse, interval * 1000, 63973, 2202);
+setInterval(checkCourse, interval * 1000, 63973, 2202);
