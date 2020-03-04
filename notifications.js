@@ -1,4 +1,4 @@
-const request = require('request');
+const request = require('request-promise-native');
 const config = require('./config.json');
 
 function sendNotification(content) {
