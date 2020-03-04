@@ -1,0 +1,32 @@
+#!/usr/bin/env node
+
+const request = require('request-promise-native');
+const { sendNotification } = require('./notifications');
+
+async function printCourse(courseNumber, quarter) {
+    const response = await request({
+        uri: 'https://pisa.ucsc.edu/class_search/index.php',
+        method: 'POST',
+        form: {
+            action: 'detail',
+            'class_data[:CLASS_NBR]': courseNumber,
+            'class_data[:STRM]': quarter
+        }
+    });
+
+    const nameMatch = response.match(/<h2 style="margin:0px;">\s*(.+?) - (\d+)(?:&nbsp;|\s)*(.+?)\s*<\/h2>/);
+    const infoMatch = response.match(/<dt>Status<\/dt><dd><img src=".+?" alt="(.+?)" .+?<\/dd>\s*<dt>Available Seats<\/dt><dd>(\d+)<\/span><\/dd>/);
+
+    const course = {
+        code: nameMatch[1],
+        section: nameMatch[2],
+        title: nameMatch[3],
+        status: infoMatch[1],
+        openSeats: infoMatch[2]
+    };
+
+    if (course.openSeats !== '0')
+        sendNotification(`${course.code}-${course.section} has ${course.openSeats} open seats`);
+}
+
+setInterval(printCourse, 20000, 63973, 2202);
