@@ -29,4 +29,7 @@ async function printCourse(courseNumber, quarter) {
         sendNotification(`${course.code}-${course.section} has ${course.openSeats} open seats`);
 }
 
-setInterval(printCourse, 20000, 63973, 2202);
+const interval = parseInt(process.argv[2]);
+console.log(`Checking for course updates every ${interval} seconds`);
+
+setInterval(printCourse, interval * 1000, 63973, 2202);
