@@ -1,11 +1,8 @@
 #!/usr/bin/env node
 
 const request = require('request-promise-native');
-const { sendNotification } = require('./notifications');
-
-function beep() {
-    process.stdout.write('\x07');
-}
+const config = require('./config.json')
+const { sendDiscord, sendPushed } = require('./notifications');
 
 function logCourse(course) {
     const time = new Date().toLocaleTimeString('en-US', {
@@ -18,37 +15,68 @@ function logCourse(course) {
     console.log(`[${time}] ${course.code}-${course.section} (${course.status}): ${course.openSeats} open seats`);
 }
 
-async function checkCourse(courseNumber, quarter) {
-    const response = await request({
-        uri: 'https://pisa.ucsc.edu/class_search/index.php',
-        method: 'POST',
-        form: {
-            action: 'detail',
-            'class_data[:CLASS_NBR]': courseNumber,
-            'class_data[:STRM]': quarter
-        }
-    });
+function sendOpenNotification(course) {
+    const service = config.course_services[course.code] || config.default_service;
 
-    const nameMatch = response.match(/<h2 style="margin:0px;">\s*(.+?) - (\d+)(?:&nbsp;|\s)*(.+?)\s*<\/h2>/);
-    const infoMatch = response.match(/<dt>Status<\/dt><dd><img src=".+?" alt="(.+?)" .+?<\/dd>\s*<dt>Available Seats<\/dt><dd>(\d+)<\/span><\/dd>/);
-
-    const course = {
-        code: nameMatch[1],
-        section: nameMatch[2],
-        title: nameMatch[3],
-        status: infoMatch[1],
-        openSeats: infoMatch[2]
-    };
-
-    logCourse(course);
-
-    if (course.openSeats !== '0') {
-        beep();
-        sendNotification(`${course.code}-${course.section} has ${course.openSeats} open seats`);
+    switch (service) {
+        case 'discord':
+            return sendDiscord({
+                embeds: [{
+                    title: `${course.code}-${course.section} is open`,
+                    description: `**${course.openSeats}** seats remaining`
+                }]
+            });
+        case 'pushed':
+            return sendPushed(`${course.code}-${course.section} has ${course.openSeats} open seats`);
+        default:
+            throw `Invalid service for ${course.code}`;
     }
 }
 
-const interval = parseInt(process.argv[2]);
-console.log(`Checking for course updates every ${interval} seconds`);
+async function checkCourses(term, courseNumbers, wait) {
+    let courseNumberIdx = 0;
 
-setInterval(checkCourse, interval * 1000, 63973, 2202);
+    while (true) {
+        const courseNumber = courseNumbers[courseNumberIdx];
+
+        courseNumberIdx++;
+        if (courseNumberIdx >= courseNumbers.length)
+            courseNumberIdx = 0;
+
+        const response = await request({
+            uri: 'https://pisa.ucsc.edu/class_search/index.php',
+            method: 'POST',
+            form: {
+                action: 'detail',
+                'class_data[:CLASS_NBR]': courseNumber,
+                'class_data[:STRM]': term
+            }
+        });
+
+        const nameMatch = response.match(/<h2 style="margin:0px;">\s*(.+?) - (\d+)(?:&nbsp;|\s)*(.+?)\s*<\/h2>/);
+        const infoMatch = response.match(/<dt>Status<\/dt><dd><img src=".+?" alt="(.+?)" .+?<\/dd>\s*<dt>Available Seats<\/dt><dd>(\d+)<\/span><\/dd>/);
+
+        const course = {
+            code: nameMatch[1],
+            section: nameMatch[2],
+            title: nameMatch[3],
+            status: infoMatch[1],
+            openSeats: parseInt(infoMatch[2])
+        };
+
+        logCourse(course);
+
+        if (course.openSeats !== 0)
+            sendOpenNotification(course);
+
+        // Sleep for `wait` seconds
+        await new Promise(resolve => setTimeout(resolve, wait * 1000));
+    }
+}
+
+const wait = parseInt(process.argv[2]);
+const term = process.argv[3];
+const courseNumbers = process.argv.slice(4);
+console.log(`Checking for updates to ${courseNumbers.join(', ')} with ${wait} second delays`);
+
+checkCourses(term, courseNumbers, wait);

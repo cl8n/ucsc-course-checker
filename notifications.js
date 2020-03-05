@@ -1,17 +1,25 @@
 const request = require('request-promise-native');
 const config = require('./config.json');
 
-function sendNotification(content) {
+function sendDiscord(webhookObject) {
+    return request({
+        uri: config.discord_webhook,
+        method: 'POST',
+        json: webhookObject
+    });
+}
+
+function sendPushed(content) {
     return request({
         uri: 'https://api.pushed.co/1/push',
         method: 'POST',
         form: {
-            app_key: config.notification_key,
-            app_secret: config.notification_secret,
+            app_key: config.pushed_key,
+            app_secret: config.pushed_secret,
             content,
             target_type: 'app'
         }
     });
 }
 
-module.exports = { sendNotification };
+module.exports = { sendDiscord, sendPushed };
